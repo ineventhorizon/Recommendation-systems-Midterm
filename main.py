@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 
+import numpy as np
 from sklearn.model_selection import train_test_split
 from surprise import Dataset, SVD, Reader, KNNWithMeans, accuracy, BaselineOnly, get_dataset_dir
 from surprise.model_selection import cross_validate, KFold
@@ -8,8 +9,13 @@ from surprise.similarities import pearson_baseline, pearson
 from sympy import false
 
 
-
-def get_top_n(predictions, n=10):
+def  getRatings(arr):
+    ratings = []
+    for uid, user_ratings in top10NotSorted.items():
+        rating = [key[1] for key in user_ratings]
+        ratings.append(rating)
+    return ratings
+def get_top_n(predictions, n=10, sort=1):
     """Return the top-N recommendation for each user from a set of predictions.
 
     Args:
@@ -30,7 +36,7 @@ def get_top_n(predictions, n=10):
 
     # Then sort the predictions for each user and retrieve the k highest ones.
     for uid, user_ratings in top_n.items():
-        user_ratings.sort(key=lambda x: x[1], reverse=True)
+        if not sort: user_ratings.sort(key=lambda x: x[1], reverse=True)
         top_n[uid] = user_ratings[:n]
 
     return top_n
@@ -91,20 +97,25 @@ for trainset, testset in kf.split(data):
 #Calculates MAE accuracy for each train & test datasets
 #Also calculates top 10 movies for Toy Story for every fold
 accuracies = []
-top10MoviesForEachUser = []
+sortedTop10 = []
+notSortedTop10 = []
 foldPrecisions = []
 foldRecalls = []
+predictions = []
 for fold in folds:
     algo.fit(fold[0])
     preds = algo.test(fold[1])
-    print(preds[0])
+    predictions.append(preds)
+
     accuracies.append(accuracy.mae(preds, verbose=0))
     precisions, recalls = precision_recall_at_k(preds, k=10, threshold=4)
     foldRecalls.append(recalls)
     foldPrecisions.append(precisions)
     #Finds top 10 movies for each user
-    top10 = get_top_n(preds, n=10)
-    top10MoviesForEachUser.append(top10)
+    top10Sorted = get_top_n(preds, n=10)
+    top10NotSorted = get_top_n(preds, n=10, sort=0)
+    sortedTop10.append(top10Sorted)
+    notSortedTop10.append(top10NotSorted)
 
 
 #Prints MAE accuracies for each fold
@@ -123,6 +134,32 @@ for precisions, recalls in zip(foldPrecisions, foldRecalls):
     print(f"For Fold{index} Precision is {prec} , Recall is {rec}")
     index += 1
 
+ratingsSorted = getRatings(top10Sorted)
+ratingsNotSorted = getRatings(top10NotSorted)
+
+def calculateDCG(relevance, N):
+    #rel = np.asarray(relevance)
+
+    log2i = np.log2(np.asarray(range(1, N + 1)) + 1)
+    sum = 0
+    for i in range(N):
+        value = 0 if i >= len(relevance)-1 else relevance[i]
+        sum += (np.power(2, value) -1) / log2i[i]
+    return sum
+
+def calculateNDCG(notSorted, N, sorted):
+    return calculateDCG(notSorted, N) / calculateDCG(sorted, N)
+
+
+
+print(ratingsNotSorted[1])
+print(calculateDCG(ratingsNotSorted[1], 10))
+
+
+print(ratingsSorted[1])
+print(calculateDCG(ratingsSorted[1], 10))
+
+print(calculateNDCG(ratingsNotSorted[1], 10, ratingsSorted)[1])
 
 
 
