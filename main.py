@@ -8,13 +8,40 @@ from surprise.model_selection import cross_validate, KFold
 from surprise.similarities import pearson_baseline, pearson
 from sympy import false
 
+def dcg_at_k(relevance_scores, k):
+    dcg = 0
 
-def  getRatings(arr):
-    ratings = []
-    for uid, user_ratings in top10NotSorted.items():
-        rating = [key[1] for key in user_ratings]
-        ratings.append(rating)
-    return ratings
+    for i in range(len(relevance_scores)):
+        value = 0 if(i> len(relevance_scores)-1) else relevance_scores[i]
+        if value is 0: print("zero")
+        dcg += value / np.log2(i + 2)  # +2 because log2(1) = 0
+    return dcg
+def idcg_at_k(relevance_scores, k):
+    relevance_scores_sorted = sorted(relevance_scores, reverse=True)
+    return dcg_at_k(relevance_scores_sorted, k)
+def ndcg_at_k(predictions, testset, k=10):
+    actual_ratings = defaultdict(list)
+    for uid, iid, true_r in testset:
+        actual_ratings[uid].append((iid, true_r))
+
+    predicted_ratings = defaultdict(list)
+    for uid, iid, true_r, est, _ in predictions:
+        predicted_ratings[uid].append((iid, est))
+
+
+    ndcg_scores = []
+    for uid in actual_ratings:
+        predicted_ratings_for_user = sorted(predicted_ratings[uid], key=lambda x: x[1], reverse=True)[:k]
+
+
+        actual_relevances = dict(actual_ratings[uid])
+        relevance_scores = [actual_relevances.get(iid, 0) for iid, _ in predicted_ratings_for_user]
+        dcg = dcg_at_k(relevance_scores, k)
+        idcg = idcg_at_k(relevance_scores, k)
+        ndcg_scores.append(dcg / idcg if idcg > 0 else 0)
+
+    return np.mean(ndcg_scores)
+
 def get_top_n(predictions, n=10, sort=1):
     """Return the top-N recommendation for each user from a set of predictions.
 
@@ -94,29 +121,33 @@ folds = []
 for trainset, testset in kf.split(data):
     folds.append((trainset, testset))
 
-#Calculates MAE accuracy for each train & test datasets
-#Also calculates top 10 movies for Toy Story for every fold
+
 accuracies = []
-sortedTop10 = []
-notSortedTop10 = []
+top10 = []
 foldPrecisions = []
 foldRecalls = []
 predictions = []
+ndcgs = []
+#Trains and calculates Mae, precision, recall and ndcg for each fold
 for fold in folds:
+    #Train fold operations
     algo.fit(fold[0])
     preds = algo.test(fold[1])
     predictions.append(preds)
 
+    #MAE calculation
     accuracies.append(accuracy.mae(preds, verbose=0))
+    #Precision calculation
     precisions, recalls = precision_recall_at_k(preds, k=10, threshold=4)
     foldRecalls.append(recalls)
     foldPrecisions.append(precisions)
     #Finds top 10 movies for each user
-    top10Sorted = get_top_n(preds, n=10)
-    top10NotSorted = get_top_n(preds, n=10, sort=0)
-    sortedTop10.append(top10Sorted)
-    notSortedTop10.append(top10NotSorted)
+    top10Pred = get_top_n(preds, n=10)
+    top10.append(top10Pred)
 
+    #NDCG calculation
+    ndcg = ndcg_at_k(preds, fold[1], 10)
+    ndcgs.append(ndcg)
 
 #Prints MAE accuracies for each fold
 print()
@@ -134,32 +165,14 @@ for precisions, recalls in zip(foldPrecisions, foldRecalls):
     print(f"For Fold{index} Precision is {prec} , Recall is {rec}")
     index += 1
 
-ratingsSorted = getRatings(top10Sorted)
-ratingsNotSorted = getRatings(top10NotSorted)
 
-def calculateDCG(relevance, N):
-    #rel = np.asarray(relevance)
-
-    log2i = np.log2(np.asarray(range(1, N + 1)) + 1)
-    sum = 0
-    for i in range(N):
-        value = 0 if i >= len(relevance)-1 else relevance[i]
-        sum += (np.power(2, value) -1) / log2i[i]
-    return sum
-
-def calculateNDCG(notSorted, N, sorted):
-    return calculateDCG(notSorted, N) / calculateDCG(sorted, N)
+print()
+index = 1
+for ndcg in ndcgs:
+    print(f"For Fold{index} NDCG@10 is {ndcg}")
+    index += 1
 
 
-
-print(ratingsNotSorted[1])
-print(calculateDCG(ratingsNotSorted[1], 10))
-
-
-print(ratingsSorted[1])
-print(calculateDCG(ratingsSorted[1], 10))
-
-print(calculateNDCG(ratingsNotSorted[1], 10, ratingsSorted)[1])
 
 
 
