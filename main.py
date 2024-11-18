@@ -13,7 +13,7 @@ def dcg_at_k(relevance_scores, k):
 
     for i in range(len(relevance_scores)):
         value = 0 if(i> len(relevance_scores)-1) else relevance_scores[i]
-        if value is 0: print("zero")
+        if value == 0: print("zero")
         dcg += value / np.log2(i + 2)  # +2 because log2(1) = 0
     return dcg
 def idcg_at_k(relevance_scores, k):
@@ -130,7 +130,7 @@ predictions = []
 ndcgs = []
 #Trains and calculates Mae, precision, recall and ndcg for each fold
 for fold in folds:
-    #Train fold operations
+    #Train fold operations, fold[0] is training set, fold[1] is test set
     algo.fit(fold[0])
     preds = algo.test(fold[1])
     predictions.append(preds)
@@ -159,12 +159,17 @@ for MAE in accuracies:
 #Prints Precision and Recall values for each fold
 print()
 index = 1
+sumPrec = 0
+sumRec = 0
 for precisions, recalls in zip(foldPrecisions, foldRecalls):
     prec = sum(prec for prec in precisions.values()) / len(precisions)
     rec = sum(rec for rec in recalls.values()) / len(recalls)
+    sumPrec += prec
+    sumRec += rec
     print(f"For Fold{index} Precision is {prec} , Recall is {rec}")
     index += 1
 
+print(f"Avg Prec is: {sumPrec/5}, Avg Rec is {sumRec/5}")
 
 print()
 index = 1
@@ -172,6 +177,7 @@ for ndcg in ndcgs:
     print(f"For Fold{index} NDCG@10 is {ndcg}")
     index += 1
 
+print(f"Averages: NDCG@10 Avg: {np.asarray(ndcgs).sum()/5}, Mae Avg: {np.asarray(accuracies).sum()/5}")
 
 
 
